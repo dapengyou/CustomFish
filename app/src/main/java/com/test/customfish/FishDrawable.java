@@ -1,5 +1,6 @@
 package com.test.customfish;
 
+import android.animation.ValueAnimator;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
@@ -8,6 +9,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.drawable.Drawable;
+import android.view.animation.LinearInterpolator;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,10 +25,14 @@ public class FishDrawable extends Drawable {
     private int OTHER_ALPHA = 110;
     private int BODY_ALPHA = 160;
 
+    private final float CHANGE_VALUE = 360f;
+    // 动画持续时间
+    private final int ANIMATOR_DURATION = 1000;
+
     //转弯更自然的重心(身体的中心点)
     private PointF middlePoint;
     // 鱼的主要朝向角度
-    private float fishMainAngle = 0;
+    private float fishMainAngle = -90;
 
     // 绘制鱼头的半径
     private float HEAD_RADIUS = 100;
@@ -50,6 +56,8 @@ public class FishDrawable extends Drawable {
     // --寻找大三角形底边中心点的线长
     private final float FIND_TRIANGLE_LENGTH = MIDDLE_CIRCLE_RADIUS * 2.7f;
 
+    float currentValue = 0;
+
     public FishDrawable() {
         init();
     }
@@ -61,14 +69,36 @@ public class FishDrawable extends Drawable {
         mPaint.setStyle(Paint.Style.FILL);
         mPaint.setAntiAlias(true);//防锯齿
         mPaint.setDither(true);//防抖
-        mPaint.setARGB(OTHER_ALPHA, 244, 92, 71);
+        mPaint.setARGB(OTHER_ALPHA, 244, 92, 71);//颜色
 
         middlePoint = new PointF(4.19f * HEAD_RADIUS, 4.19f * HEAD_RADIUS);
+
+        ValueAnimator valueAnimator = ValueAnimator.ofFloat(0, CHANGE_VALUE);//变化值
+        //设置动画周期
+        valueAnimator.setDuration(ANIMATOR_DURATION);
+        //设置循环次数，无限次
+        valueAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        //设置循环模式
+        valueAnimator.setRepeatMode(ValueAnimator.RESTART);
+        //设置插值器
+        valueAnimator.setInterpolator(new LinearInterpolator());
+
+        valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                currentValue = (float) valueAnimator.getAnimatedValue();
+
+                invalidateSelf();//重绘
+            }
+        });
+        valueAnimator.start();
     }
+
+    private float frequence = 1f;
 
     @Override
     public void draw(@NonNull Canvas canvas) {
-        float fishAngle = fishMainAngle;
+        float fishAngle = (float) (fishMainAngle +  Math.sin(Math.toRadians(currentValue)) * 10);
 
         //鱼头圆心坐标
         PointF headPoint = calculatePoint(middlePoint, BODY_LENGTH / 2, fishAngle);
@@ -135,11 +165,14 @@ public class FishDrawable extends Drawable {
      * @param fishAngle
      */
     private void makeTriangle(Canvas canvas, PointF startPoint, float findTriangleLength, float triangleHalfLength, float fishAngle) {
+        //乘以1.5 的原因是为了 让鱼头和鱼尾摆动的频次不同
+
+        float triangelAngle = (float) (fishAngle + Math.sin(Math.toRadians(currentValue * 1.5)) * 35);
         // 三角形底边的中心坐标
-        PointF centerPoint = calculatePoint(startPoint, findTriangleLength, fishAngle - 180);
+        PointF centerPoint = calculatePoint(startPoint, findTriangleLength, triangelAngle - 180);
         // 三角形底边两点
-        PointF leftPoint = calculatePoint(centerPoint, triangleHalfLength, fishAngle - 90);
-        PointF rightPoint = calculatePoint(centerPoint, triangleHalfLength, fishAngle + 90);
+        PointF leftPoint = calculatePoint(centerPoint, triangleHalfLength, triangelAngle - 90);
+        PointF rightPoint = calculatePoint(centerPoint, triangleHalfLength, triangelAngle + 90);
 
         mPath.reset();
         mPath.moveTo(startPoint.x, startPoint.y);
@@ -162,15 +195,25 @@ public class FishDrawable extends Drawable {
      * @return 计算节肢1的时候需要返回梯形小圆的圆心点，这个是绘制节肢2和三角形的起始点
      */
     private PointF makeSegment(Canvas canvas, PointF bodyBottomcenterPoint, float bigRadius, float smallRadius, float findSmallCircleLength, float fishAngle, boolean hasBigCircle) {
+
+        float segmentAngle;
+        if (hasBigCircle) {
+            // 节肢1
+            segmentAngle = (float) (fishAngle + Math.cos(Math.toRadians(currentValue * 1.5)) * 15);
+        } else {
+            // 节肢2
+            segmentAngle = (float) (fishAngle + Math.sin(Math.toRadians(currentValue * 1.5)) * 35);
+        }
+
         // 梯形上底圆的圆心
         PointF upperCenterPoint = calculatePoint(bodyBottomcenterPoint, findSmallCircleLength,
-                fishAngle - 180);
+                segmentAngle - 180);
 
         //梯形的四个点
-        PointF bottomLeftPoint = calculatePoint(bodyBottomcenterPoint, bigRadius, fishAngle - 90);
-        PointF bottomRightPoint = calculatePoint(bodyBottomcenterPoint, bigRadius, fishAngle + 90);
-        PointF upperLeftPoint = calculatePoint(upperCenterPoint, smallRadius, fishAngle - 90);
-        PointF upperRightPoint = calculatePoint(upperCenterPoint, smallRadius, fishAngle + 90);
+        PointF bottomLeftPoint = calculatePoint(bodyBottomcenterPoint, bigRadius, segmentAngle - 90);
+        PointF bottomRightPoint = calculatePoint(bodyBottomcenterPoint, bigRadius, segmentAngle + 90);
+        PointF upperLeftPoint = calculatePoint(upperCenterPoint, smallRadius, segmentAngle - 90);
+        PointF upperRightPoint = calculatePoint(upperCenterPoint, smallRadius, segmentAngle + 90);
 
         //画梯形
         mPath.reset();
